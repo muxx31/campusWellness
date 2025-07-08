@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import axios from 'axios';
+import BACKEND_URL from '../config'; // ✅ Import backend URL
 
 const CounselorLoginSignup = ({ onLogin }) => {
   const [isSignup, setIsSignup] = useState(false);
@@ -20,12 +21,12 @@ const CounselorLoginSignup = ({ onLogin }) => {
 
     try {
       if (isSignup) {
-        const res = await axios.post('http://localhost:5001/api/auth/signup', form);
+        const res = await axios.post(`${BACKEND_URL}/api/auth/signup`, form); // ✅ updated URL
         setMessage(res.data.message || 'Signup successful! You can now log in.');
         setIsSignup(false);
         setForm({ name: '', password: '' });
       } else {
-        const res = await axios.post('http://localhost:5001/api/auth/login', form);
+        const res = await axios.post(`${BACKEND_URL}/api/auth/login`, form); // ✅ updated URL
         const userData = { role: 'counselor', name: res.data.name };
 
         // ✅ Save to localStorage

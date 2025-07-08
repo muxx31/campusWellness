@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import axios from 'axios';
 
 const StudentLoginSignup = ({ onLogin }) => {
   const [alias, setAlias] = useState('');

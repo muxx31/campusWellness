@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
 import { useNavigate } from 'react-router-dom';
+import BACKEND_URL from '../config'; // ✅ import backend URL
 
 const ChatRoom = () => {
   const [message, setMessage] = useState('');
@@ -27,7 +28,7 @@ const ChatRoom = () => {
 
   useEffect(() => {
     if (!socketRef.current) {
-      socketRef.current = io('http://localhost:5001');
+      socketRef.current = io(BACKEND_URL); // ✅ dynamic backend URL
     }
 
     const socket = socketRef.current;

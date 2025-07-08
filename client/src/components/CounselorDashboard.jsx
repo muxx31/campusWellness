@@ -1,8 +1,7 @@
-
-
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import BACKEND_URL from '../config'; // ✅ import backend base URL
 
 const CounselorDashboard = ({ counselorName: propCounselor }) => {
   const [counselorName, setCounselorName] = useState(
@@ -20,14 +19,13 @@ const CounselorDashboard = ({ counselorName: propCounselor }) => {
       localStorage.setItem('counselorName', propCounselor);
       setCounselorName(propCounselor);
     } else if (!counselorName) {
-      navigate('/login'); // or your fallback route
+      navigate('/login');
     }
   }, [propCounselor, counselorName, navigate]);
 
-
   const fetchBookings = async () => {
     try {
-      const res = await axios.get(`http://localhost:5001/api/bookings/${counselorName}`);
+      const res = await axios.get(`${BACKEND_URL}/api/bookings/${counselorName}`);
       const all = res.data;
 
       const now = new Date();
@@ -51,7 +49,7 @@ const CounselorDashboard = ({ counselorName: propCounselor }) => {
       });
 
       setActiveBooking(active);
-      setUpcoming(future); // ✅ All future bookings shown here
+      setUpcoming(future);
       setMissed(past.reverse());
     } catch (err) {
       console.error('Fetch error:', err.response?.data || err.message);
@@ -110,10 +108,13 @@ const CounselorDashboard = ({ counselorName: propCounselor }) => {
   return (
     <div className="bg-[url(/images/image2.png)] p-6 min-w-screen min-h-screen mx-auto space-y-6">
       <h2 className="text-5xl font-bold mb-4 ml-20 mr-210 bg-teal-400 text-teal-950 text-shadow-lg text-shadow-teal-100">Welcome, Dr. {counselorName}</h2>
-      <div className="bg-teal  ml-12 mr-12 rounded-2xl shadow-lg p-2 flex flex-col md:flex-row gap-4 h-[85vh] overflow-hidden">
-    
+      <div className="bg-teal ml-12 mr-12 rounded-2xl shadow-lg p-2 flex flex-col md:flex-row gap-4 h-[85vh] overflow-hidden">
+
         <div className='w-2xl'>
-        <div className='text-3xl p-9 bg-gradient-to-r from-teal-950 to-teal-700 m-5 rounded-xl text-teal-100 text-center'>Your presence today might be the light in someone’s darkness.</div>
+          <div className='text-3xl p-9 bg-gradient-to-r from-teal-950 to-teal-700 m-5 rounded-xl text-teal-100 text-center'>
+            Your presence today might be the light in someone’s darkness.
+          </div>
+
           {/* Active Session */}
           <div className="bg-gradient-to-r from-teal-950 to-teal-700 m-5 h-[200px] p-4 rounded-xl shadow">
             <h3 className="text-xl font-semibold mb-2 text-teal-100">Active Chat Session</h3>

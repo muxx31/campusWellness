@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import axios from 'axios';
+import BACKEND_URL from '../config'; // ✅ import from config
 
 const BookingForm = ({ alias, onBookingSuccess }) => {
   const [form, setForm] = useState({
@@ -17,8 +18,8 @@ const BookingForm = ({ alias, onBookingSuccess }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await axios.post('http://localhost:5001/api/book', form);
-      if (onBookingSuccess) onBookingSuccess(); // 👈 notify Home to re-fetch
+      await axios.post(`${BACKEND_URL}/api/book`, form); // ✅ use dynamic base URL
+      if (onBookingSuccess) onBookingSuccess();
 
       // Reset form
       setForm({

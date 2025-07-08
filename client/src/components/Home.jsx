@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import BookingForm from './BookingForm';
 import { useNavigate } from 'react-router-dom';
+import BACKEND_URL from '../config'; // ✅ Import backend base URL
 
 const Home = ({ alias }) => {
   const [bookings, setBookings] = useState([]);
@@ -10,7 +11,7 @@ const Home = ({ alias }) => {
 
   const fetchStudentBookings = async () => {
     try {
-      const res = await axios.get(`http://localhost:5001/api/student/${alias}`);
+      const res = await axios.get(`${BACKEND_URL}/api/student/${alias}`);
       const now = new Date();
 
       const active = res.data.filter(b => {
@@ -66,7 +67,6 @@ const Home = ({ alias }) => {
           <div className="text-3xl p-9 text-teal-200 text-center">It's completely human to have hard days — you're not alone.</div>
           <BookingForm alias={alias} onBookingSuccess={fetchStudentBookings} />
         </div>
-
 
         {/* Right Panel - Booking Form */}
         <div className="w-full md:w-1/2 p-4 bg-gradient-to-r from-teal-700 to-teal-400 rounded-xl overflow-hidden">
