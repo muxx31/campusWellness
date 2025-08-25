@@ -9,8 +9,19 @@ const app = express();
 const PORT = process.env.PORT || 5001;
 const MONGO_URI = process.env.MONGO_URI;
 
+// ✅ CORS Configuration (Allow Only Your Frontend Domain)
+app.use(
+  cors({
+    origin: 'https://campuswellness-2.onrender.com', // your frontend domain
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    credentials: true,
+  })
+);
+
+// ✅ Handle Preflight Requests (Important for POST/PUT/DELETE)
+app.options('*', cors());
+
 // Middleware
-app.use(cors());
 app.use(express.json());
 
 // Routes
@@ -37,7 +48,7 @@ mongoose
 
     const io = new Server(server, {
       cors: {
-        origin: '*', // ✅ Vite frontend
+        origin: 'https://campuswellness-2.onrender.com', // ✅ Allow frontend for sockets too
         methods: ['GET', 'POST'],
       },
     });
