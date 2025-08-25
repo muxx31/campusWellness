@@ -12,7 +12,7 @@ const MONGO_URI = process.env.MONGO_URI;
 // ✅ CORS Configuration (Allow Only Your Frontend Domain)
 app.use(
   cors({
-    origin: 'https://campusWellness-2.onrender.com', // your frontend domain
+    origin: 'https://campuswellness-2.onrender.com', // your frontend domain
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     credentials: true,
   })
