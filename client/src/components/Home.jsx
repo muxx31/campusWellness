@@ -58,14 +58,19 @@ const Home = ({ alias }) => {
   };
 
   return (
-    <div className="bg-[url(/images/image2.png)] bg-cover bg-fixed min-h-screen w-full flex flex-col items-center p-4 sm:p-6">
+    <div className="bg-[url(/images/image2.png)] bg-cover bg-fixed min-h-screen w-full flex flex-col items-center 
+                    p-4 sm:p-6 pt-20 sm:pt-6">
+      {/* ↑ Added pt-20 on mobile → shifts content slightly down so Logout button won't overlap */}
+
       <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-4 text-center text-black rounded-2xl text-shadow-teal-200 text-shadow-lg">
         Welcome to Campus Wellness
       </h1>
 
-      <div className="bg-teal rounded-2xl shadow-lg p-4 sm:p-6 flex flex-col md:flex-row gap-4 md:gap-6 w-full max-w-6xl h-auto md:h-[80vh] overflow-hidden">
+      <div className="bg-teal rounded-2xl shadow-lg p-4 sm:p-6 flex flex-col md:flex-row gap-4 md:gap-6 
+                      w-full max-w-6xl h-auto md:h-[80vh] overflow-hidden">
         {/* Left Panel */}
-        <div className="w-full md:w-1/2 bg-gradient-to-r from-teal-950 to-teal-700 shadow-2xl p-4 sm:p-6 rounded-xl overflow-auto flex flex-col justify-center">
+        <div className="w-full md:w-1/2 bg-gradient-to-r from-teal-950 to-teal-700 shadow-2xl 
+                        p-4 sm:p-6 rounded-xl overflow-auto flex flex-col justify-center">
           <div className="text-lg sm:text-xl md:text-2xl text-teal-200 text-center mb-4">
             It's completely human to have hard days — you're not alone.
           </div>
@@ -73,7 +78,8 @@ const Home = ({ alias }) => {
         </div>
 
         {/* Right Panel */}
-        <div className="w-full md:w-1/2 p-4 sm:p-6 bg-gradient-to-r from-teal-700 to-teal-400 rounded-xl overflow-hidden flex flex-col">
+        <div className="w-full md:w-1/2 p-4 sm:p-6 bg-gradient-to-r from-teal-700 to-teal-400 
+                        rounded-xl overflow-hidden flex flex-col">
           <h2 className="text-lg sm:text-xl font-semibold mb-2 text-teal-100 text-center md:text-left">
             📅 Your Upcoming Session
           </h2>
@@ -83,7 +89,8 @@ const Home = ({ alias }) => {
               {bookings.map((b) => (
                 <div
                   key={`${b.date}-${b.time}-${b.counselor}`}
-                  className="p-3 sm:p-4 rounded bg-gradient-to-r from-gray-500 to-gray-400 text-white shadow"
+                  className="p-3 sm:p-4 rounded bg-gradient-to-r from-gray-500 to-gray-400 
+                             text-white shadow"
                 >
                   <p><strong>Counselor:</strong> {b.counselor}</p>
                   <p><strong>Date:</strong> {b.date}</p>

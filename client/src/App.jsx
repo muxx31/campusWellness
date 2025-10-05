@@ -119,14 +119,15 @@ function App() {
 
 // 🔘 Logout Button
 const LogoutBtn = ({ onLogout }) => (
-  <div className="absolute top-4 right-4 sm:top-6 sm:right-6">
+  <div className="fixed top-3 right-3 z-50">
     <button
       onClick={onLogout}
-      className="bg-red-600 text-white px-3 py-1 sm:px-4 sm:py-2 rounded"
+      className="bg-red-600 text-white px-3 py-1 sm:px-4 sm:py-2 text-sm sm:text-base rounded-md shadow-md hover:bg-red-700 transition-all"
     >
       Logout
     </button>
   </div>
 );
+
 
 export default App;
