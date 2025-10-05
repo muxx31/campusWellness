@@ -1,43 +1,24 @@
+# Node.js dependencies
+/node_modules
 
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-
-
-logs
-*.log
-*.log.*
-
-
+# Environment variables (keep secrets safe)
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
 
+# Logs
+*.log
 
-.DS_Store
-Thumbs.db
-
-
-.vite/
-
-
-.vscode/
-.idea/
-*.sublime-workspace
-*.sublime-project
-
-
+# Build output (React / Vite)
 dist/
 build/
 
+# OS generated files
+.DS_Store
+Thumbs.db
 
-*.swp
+# IDE/editor files
+.vscode/
+.idea/
 
-
-*.sqlite
-*.db
-*.bak
+# Coverage reports
+coverage/
+*.lcov

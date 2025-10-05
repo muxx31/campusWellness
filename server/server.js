@@ -1,82 +1,99 @@
-const express = require('express');
-const mongoose = require('mongoose');
-const cors = require('cors');
-require('dotenv').config();
-const bookingRoutes = require('./routes/bookingRoutes');
-const authRoutes = require('./routes/authRoutes');
+import express from "express";
+import mongoose from "mongoose";
+import cors from "cors";
+import dotenv from "dotenv";
+import bookingRoutes from "./routes/bookingRoutes.js";
+import authRoutes from "./routes/counselorAuthRoutes.js";
+import studentAuthRoutes from "./routes/studentAuthRoutes.js";
+import { createServer } from "http";
+import { Server } from "socket.io";
+
+dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5001;
 const MONGO_URI = process.env.MONGO_URI;
 
-// ✅ CORS Configuration (Allow Only Your Frontend Domain)
+// ✅ Allowed frontend origins
+const allowedOrigins = [
+  "http://localhost:5173",                  // local dev frontend
+  "https://campuswellness-2.onrender.com"  // deployed frontend
+];
+
+// ✅ CORS Middleware
 app.use(
   cors({
-    origin: 'https://campuswellness-2.onrender.com', // your frontend domain
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    origin: function (origin, callback) {
+      // allow requests with no origin (like Postman or mobile apps)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.indexOf(origin) === -1) {
+        const msg = "The CORS policy does not allow access from this origin.";
+        return callback(new Error(msg), false);
+      }
+      return callback(null, true);
+    },
+    methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true,
   })
 );
 
-// ✅ Handle Preflight Requests (Important for POST/PUT/DELETE)
-app.options('*', cors());
+// ✅ Handle Preflight Requests
+app.options("*", cors());
 
-// Middleware
+// ✅ Middleware
 app.use(express.json());
 
-// Routes
-app.use('/api', bookingRoutes);
-app.use('/api/auth', authRoutes);
+// ✅ Routes
+app.use("/api", bookingRoutes);
+app.use("/api/auth", authRoutes);
+app.use("/api/student", studentAuthRoutes);
 
-// Test route
-app.get('/ping', (req, res) => {
-  res.send('pong');
+// ✅ Test Route
+app.get("/ping", (req, res) => {
+  res.send("pong");
 });
 
-// MongoDB connection and Socket.IO setup
+// ✅ MongoDB + Socket.IO Setup
 mongoose
   .connect(MONGO_URI, {
     useNewUrlParser: true,
     useUnifiedTopology: true,
   })
   .then(() => {
-    console.log('✅ Connected to MongoDB');
+    console.log("✅ Connected to MongoDB");
 
-    const http = require('http');
-    const { Server } = require('socket.io');
-    const server = http.createServer(app);
+    const server = createServer(app);
 
+    // ✅ Socket.IO Server with CORS
     const io = new Server(server, {
       cors: {
-        origin: 'https://campuswellness-2.onrender.com', // ✅ Allow frontend for sockets too
-        methods: ['GET', 'POST'],
+        origin: allowedOrigins,
+        methods: ["GET", "POST"],
       },
     });
 
-    // ✅ Socket.IO logic
-    io.on('connection', (socket) => {
-      console.log('🟢 New user connected:', socket.id);
+    io.on("connection", (socket) => {
+      console.log("🟢 New user connected:", socket.id);
 
-      socket.on('join_room', (roomId) => {
+      socket.on("join_room", (roomId) => {
         socket.join(roomId);
         console.log(`🔗 User ${socket.id} joined room: ${roomId}`);
       });
 
-      socket.on('send_message', (data) => {
+      socket.on("send_message", (data) => {
         console.log(`📨 ${data.alias} sent to ${data.room}: ${data.text}`);
-        io.to(data.room).emit('receive_message', data); // 👈 broadcast to room
+        io.to(data.room).emit("receive_message", data);
       });
 
-      socket.on('disconnect', () => {
-        console.log('🔴 User disconnected:', socket.id);
+      socket.on("disconnect", () => {
+        console.log("🔴 User disconnected:", socket.id);
       });
     });
 
-    // Start server
-    server.listen(PORT, () => {
-      console.log(`🚀 Server + Socket.IO running at http://localhost:${PORT}`);
-    });
+    server.listen(PORT, () =>
+      console.log(`🚀 Server + Socket.IO running at http://localhost:${PORT}`)
+    );
   })
   .catch((err) => {
-    console.error('❌ MongoDB connection error:', err.message);
+    console.error("❌ MongoDB connection error:", err.message);
   });

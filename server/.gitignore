@@ -1,6 +1,24 @@
-node_modules/
+# Node.js dependencies
+/node_modules
+
+# Environment variables (keep secrets safe)
 .env
-dist/
-logs/
+
+# Logs
 *.log
+
+# Build output (React / Vite)
+dist/
+build/
+
+# OS generated files
 .DS_Store
+Thumbs.db
+
+# IDE/editor files
+.vscode/
+.idea/
+
+# Coverage reports
+coverage/
+*.lcov

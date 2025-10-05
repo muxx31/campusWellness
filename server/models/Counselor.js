@@ -1,15 +1,20 @@
-const mongoose = require('mongoose');
+import mongoose from "mongoose";
 
 const counselorSchema = new mongoose.Schema({
   name: {
     type: String,
     required: true,
-    unique: true
+  },
+  email: {
+    type: String,
+    required: true,
+    unique: true, // ensures no duplicate email
   },
   password: {
     type: String,
-    required: true
-  }
+    required: true,
+  },
 });
 
-module.exports = mongoose.model('Counselor', counselorSchema);
+const Counselor = mongoose.model("Counselor", counselorSchema);
+export default Counselor;
