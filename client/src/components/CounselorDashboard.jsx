@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
-import BACKEND_URL from '../config'; // ✅ import backend base URL
+import BACKEND_URL from '../config';
 
 const CounselorDashboard = ({ counselorName: propCounselor }) => {
   const [counselorName, setCounselorName] = useState(
@@ -80,9 +80,9 @@ const CounselorDashboard = ({ counselorName: propCounselor }) => {
     return (
       <div
         key={b._id}
-        className="border p-4 rounded shadow bg-gray-600 flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4"
+        className="border p-4 rounded shadow bg-gray-600 flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 w-full"
       >
-        <div className="text-left text-white">
+        <div className="text-left text-white w-full sm:w-3/4">
           <p><strong>Alias:</strong> {b.alias}</p>
           <p><strong>Date:</strong> {b.date}</p>
           <p><strong>Time:</strong> {b.time}</p>
@@ -96,7 +96,7 @@ const CounselorDashboard = ({ counselorName: propCounselor }) => {
             className={`mt-3 sm:mt-0 px-3 py-1 rounded ${isActive
               ? 'bg-green-600 text-white hover:bg-green-700'
               : 'bg-gray-400 text-white cursor-not-allowed'
-              }`}
+              } sm:ml-4`}
           >
             {isActive ? 'Join Chat' : 'Chat Inactive'}
           </button>
@@ -106,18 +106,21 @@ const CounselorDashboard = ({ counselorName: propCounselor }) => {
   };
 
   return (
-    <div className="bg-[url(/images/image2.png)] p-6 min-w-screen min-h-screen mx-auto space-y-6">
-      <h2 className="text-5xl font-bold mb-4 ml-20 mr-210 bg-teal-400 text-teal-950 text-shadow-lg text-shadow-teal-100">Welcome, Dr. {counselorName}</h2>
-      <div className="bg-teal ml-12 mr-12 rounded-2xl shadow-lg p-2 flex flex-col md:flex-row gap-4 h-[85vh] overflow-hidden">
+    <div className="bg-[url(/images/image2.png)] p-4 sm:p-6 min-h-screen mx-auto space-y-6">
+      <h2 className="text-3xl sm:text-5xl font-bold mb-4 px-4 sm:px-20 bg-teal-400 text-teal-950 text-shadow-lg text-shadow-teal-100">
+        Welcome, Dr. {counselorName}
+      </h2>
 
-        <div className='w-2xl'>
-          <div className='text-3xl p-9 bg-gradient-to-r from-teal-950 to-teal-700 m-5 rounded-xl text-teal-100 text-center'>
+      <div className="bg-teal ml-2 sm:ml-12 mr-2 sm:mr-12 rounded-2xl shadow-lg p-2 flex flex-col md:flex-row gap-4 h-auto md:h-[85vh] overflow-hidden">
+
+        <div className='w-full md:w-2/3 flex flex-col'>
+          <div className='text-xl sm:text-3xl p-4 sm:p-9 bg-gradient-to-r from-teal-950 to-teal-700 m-2 sm:m-5 rounded-xl text-teal-100 text-center'>
             Your presence today might be the light in someone’s darkness.
           </div>
 
           {/* Active Session */}
-          <div className="bg-gradient-to-r from-teal-950 to-teal-700 m-5 h-[200px] p-4 rounded-xl shadow">
-            <h3 className="text-xl font-semibold mb-2 text-teal-100">Active Chat Session</h3>
+          <div className="bg-gradient-to-r from-teal-950 to-teal-700 m-2 sm:m-5 h-auto sm:h-[200px] p-4 rounded-xl shadow overflow-auto">
+            <h3 className="text-lg sm:text-xl font-semibold mb-2 text-teal-100">Active Chat Session</h3>
             {activeBooking ? (
               renderBookingCard(activeBooking)
             ) : (
@@ -125,9 +128,9 @@ const CounselorDashboard = ({ counselorName: propCounselor }) => {
             )}
           </div>
 
-          {/* Upcoming Sessions with scroll */}
-          <div className="bg-gradient-to-r from-teal-950 to-teal-700 m-5 p-4 rounded-xl shadow max-h-[200px] text-black overflow-y-auto">
-            <h3 className="text-xl font-semibold mb-2 text-teal-100">Upcoming Sessions</h3>
+          {/* Upcoming Sessions */}
+          <div className="bg-gradient-to-r from-teal-950 to-teal-700 m-2 sm:m-5 p-4 rounded-xl shadow max-h-[200px] sm:max-h-[300px] text-black overflow-y-auto">
+            <h3 className="text-lg sm:text-xl font-semibold mb-2 text-teal-100">Upcoming Sessions</h3>
             {upcoming.length > 0 ? (
               upcoming.map((b) => renderBookingCard(b))
             ) : (
@@ -137,8 +140,8 @@ const CounselorDashboard = ({ counselorName: propCounselor }) => {
         </div>
 
         {/* Previous Sessions */}
-        <div className="bg-gradient-to-r from-teal-700 to-teal-400 m-5 w-xl p-4 rounded-xl shadow overflow-y-auto">
-          <h3 className="text-xl font-semibold mb-2 text-teal-50">Previous Sessions</h3>
+        <div className="bg-gradient-to-r from-teal-700 to-teal-400 m-2 sm:m-5 w-full md:w-1/3 p-4 rounded-xl shadow max-h-[500px] sm:max-h-full overflow-y-auto">
+          <h3 className="text-lg sm:text-xl font-semibold mb-2 text-teal-50">Previous Sessions</h3>
           {missed.length > 0 ? (
             missed.map((b) => renderBookingCard(b, false))
           ) : (

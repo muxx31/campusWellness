@@ -7,6 +7,8 @@ import authRoutes from "./routes/counselorAuthRoutes.js";
 import studentAuthRoutes from "./routes/studentAuthRoutes.js";
 import { createServer } from "http";
 import { Server } from "socket.io";
+import counselorAuthRoutes from "./routes/counselorAuthRoutes.js";
+
 
 dotenv.config();
 
@@ -47,6 +49,7 @@ app.use(express.json());
 app.use("/api", bookingRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/student", studentAuthRoutes);
+app.use("/api/counselorAuth", counselorAuthRoutes);
 
 // ✅ Test Route
 app.get("/ping", (req, res) => {
