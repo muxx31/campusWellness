@@ -6,6 +6,7 @@ import BACKEND_URL from '../config'; // ✅ import backend URL
 const ChatRoom = () => {
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState([]);
+  const [summary, setSummary] = useState('');
   const socketRef = useRef(null);
   const navigate = useNavigate();
 
@@ -16,7 +17,9 @@ const ChatRoom = () => {
   }
 
   const { alias, counselor, date, time } = session;
+
   const room = `${counselor}_${date}_${time}`;
+  const isCounselor = alias === counselor;
 
   // Load messages from localStorage on mount
   useEffect(() => {
@@ -33,7 +36,10 @@ const ChatRoom = () => {
 
     const socket = socketRef.current;
 
-    socket.emit('join_room', room);
+    socket.emit("join_room", {
+      roomId: room,
+      role: isCounselor ? "counselor" : "student",
+    });
     console.log(`Joined room: ${room}`);
 
     socket.on('receive_message', (data) => {
@@ -44,8 +50,20 @@ const ChatRoom = () => {
       });
     });
 
+    socket.on("receive_summary", (data) => {
+      console.log("SUMMARY RAW:", data);
+    
+      const finalSummary =
+        typeof data === "string"
+          ? data
+          : data?.summary || "";
+    
+      setSummary(finalSummary);
+    });
+
     return () => {
       socket.off('receive_message');
+      socket.off('receive_summary');
       socket.disconnect();
       socketRef.current = null;
     };
@@ -77,15 +95,71 @@ const ChatRoom = () => {
 
       <h2 className="text-xl font-bold mb-4 text-center">🗣️ Anonymous Chat</h2>
 
-      <div className="h-[60vh] overflow-y-auto p-3 bg-white text-black rounded shadow mb-4">
-        {messages.map((msg, idx) => (
-          <div key={idx} className={`mb-2 ${msg.alias === alias ? 'text-right' : 'text-left'}`}>
-            <div className={`inline-block px-3 py-1 rounded-lg ${msg.alias === alias ? 'bg-blue-200' : 'bg-green-100'}`}>
-              <span className="font-semibold">{msg.alias === alias ? 'You' : msg.alias}</span>: {msg.text}
-              <div className="text-xs text-gray-600">{msg.timestamp}</div>
-            </div>
+      <div className="flex flex-col lg:flex-row gap-4">
+
+        {/* Chat Section */}
+        <div className="flex-[3]">
+
+          <div className="h-[60vh] overflow-y-auto p-3 bg-white text-black rounded shadow mb-4">
+
+            {messages.map((msg, idx) => (
+
+              <div
+                key={idx}
+                className={`mb-2 ${msg.alias === alias
+                    ? 'text-right'
+                    : 'text-left'
+                  }`}
+              >
+
+                <div
+                  className={`inline-block px-3 py-1 rounded-lg ${msg.alias === alias
+                      ? 'bg-blue-200'
+                      : 'bg-green-100'
+                    }`}
+                >
+
+                  <span className="font-semibold">
+                    {msg.alias === alias
+                      ? 'You'
+                      : 'Anonymous'}
+                  </span>
+
+                  : {msg.text}
+
+                  <div className="text-xs text-gray-600">
+                    {msg.timestamp}
+                  </div>
+
+                </div>
+
+              </div>
+
+            ))}
+
           </div>
-        ))}
+
+        </div>
+
+        {/* Counselor Summary */}
+        {isCounselor && (
+
+          <div className="flex-1 bg-white text-black rounded shadow p-4 h-[60vh]">
+
+            <h3 className="text-lg font-bold mb-3">
+              🧠 AI Summary
+            </h3>
+
+            <div className="text-sm whitespace-pre-wrap">
+
+              {summary || "Waiting for AI summary..."}
+
+            </div>
+
+          </div>
+
+        )}
+
       </div>
 
       <div className="flex gap-2">
