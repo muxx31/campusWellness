@@ -1,10 +1,27 @@
 import express from "express";
-import { counselorSignup, counselorLogin } from "../controllers/counselorAuthController.js";
+
+import {
+  counselorSignup,
+  counselorLogin,
+  getCounselors,
+} from "../controllers/counselorAuthController.js";
 
 const router = express.Router();
 
-// routes
-router.post("/signup", counselorSignup);
-router.post("/login", counselorLogin);
+router.post(
+  "/signup",
+  counselorSignup
+);
+
+router.post(
+  "/login",
+  counselorLogin
+);
+
+// Used by students when selecting a counselor
+router.get(
+  "/list",
+  getCounselors
+);
 
 export default router;
