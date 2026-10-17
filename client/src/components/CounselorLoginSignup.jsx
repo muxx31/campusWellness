@@ -49,6 +49,13 @@ const CounselorLoginSignup = ({
           }
         );
 
+        // Accounts must be approved by an administrator before first login
+        if (res.data.pendingApproval || !res.data.token) {
+          setMessage(res.data.message);
+          setIsSignup(false);
+          return;
+        }
+
         // Store JWT
         localStorage.setItem(
           "token",

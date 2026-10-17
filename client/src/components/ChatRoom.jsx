@@ -8,6 +8,7 @@ import { io } from "socket.io-client";
 import { useNavigate } from "react-router-dom";
 
 import BACKEND_URL from "../config";
+import { refreshAccessToken } from "../api";
 
 const ChatRoom = () => {
   const [message, setMessage] =
@@ -21,6 +22,15 @@ const ChatRoom = () => {
 
   const [chatError, setChatError] =
     useState("");
+
+  const [ended, setEnded] =
+    useState(false);
+
+  const [endsAt, setEndsAt] =
+    useState(null);
+
+  const [now, setNow] =
+    useState(() => Date.now());
 
   const socketRef =
     useRef(null);
@@ -91,38 +101,20 @@ const ChatRoom = () => {
     "counselor";
 
 
-  const displayAlias =
-    isCounselor
-      ? user.name
-      : user.studentId;
+  // Own messages are recognised by role: a room only ever has one student and one counselor.
 
 
   // ==================================================
-  // LOAD LOCAL MESSAGES
+  // RETENTION: conversations are never kept in the browser.
+  // The server deletes the chat when the 45-minute session ends.
   // ==================================================
 
   useEffect(() => {
-    const saved =
-      localStorage.getItem(
-        `chat_${room}`
-      );
+    localStorage.removeItem(`chat_${room}`); // cleanup of caches from older versions
 
-    if (saved) {
-      try {
-        setMessages(
-          JSON.parse(saved)
-        );
-      } catch (error) {
-        console.error(
-          "Invalid saved chat:",
-          error
-        );
-
-        localStorage.removeItem(
-          `chat_${room}`
-        );
-      }
-    }
+    return () => {
+      localStorage.removeItem(`chat_${room}`);
+    };
   }, [room]);
 
 
@@ -145,12 +137,22 @@ const ChatRoom = () => {
     }
 
 
+    // websocket-only: no sticky sessions needed behind a load balancer.
+    // `auth` is a function so reconnects always use the latest access token.
     const socket =
       io(BACKEND_URL, {
-        auth: {
-          token,
-        },
+        transports: ["websocket"],
+        withCredentials: true,
+        auth: (cb) =>
+          cb({
+            token:
+              localStorage.getItem(
+                "token"
+              ),
+          }),
       });
+
+    let triedRefresh = false;
 
 
     socketRef.current =
@@ -163,11 +165,29 @@ const ChatRoom = () => {
 
     socket.on(
       "connect_error",
-      (error) => {
+      async (error) => {
         console.error(
           "Socket connection error:",
           error.message
         );
+
+        // Access tokens last 15 min: renew once and retry
+        if (
+          !triedRefresh &&
+          /token/i.test(
+            error.message
+          )
+        ) {
+          triedRefresh = true;
+
+          try {
+            await refreshAccessToken();
+            socket.connect();
+            return;
+          } catch {
+            /* fall through to error */
+          }
+        }
 
         setChatError(
           "Unable to authenticate with chat server."
@@ -234,25 +254,55 @@ const ChatRoom = () => {
     // RECEIVE MESSAGE
     // ==================================================
 
+    // Server replays the stored conversation when you (re)join a session
+    socket.on(
+      "chat_history",
+      (history) => {
+        if (!Array.isArray(history)) return;
+
+        setMessages(history);
+      }
+    );
+
+
     socket.on(
       "receive_message",
       (data) => {
         setMessages(
-          (prev) => {
-            const updated = [
-              ...prev,
-              data,
-            ];
+          (prev) => [
+            ...prev,
+            data,
+          ]
+        );
+      }
+    );
 
-            localStorage.setItem(
-              `chat_${room}`,
-              JSON.stringify(
-                updated
-              )
-            );
 
-            return updated;
-          }
+    // ==================================================
+    // STRICT 45-MINUTE WINDOW
+    // ==================================================
+
+    socket.on(
+      "session_info",
+      (info) => {
+        if (info?.endsAt) {
+          setEndsAt(
+            new Date(info.endsAt)
+          );
+        }
+      }
+    );
+
+    socket.on(
+      "session_ended",
+      (text) => {
+        setEnded(true);
+        setMessages([]);
+        setSummary("");
+        setChatError(
+          typeof text === "string"
+            ? text
+            : "This session has ended."
         );
       }
     );
@@ -300,11 +350,23 @@ const ChatRoom = () => {
       );
 
       socket.off(
+        "chat_history"
+      );
+
+      socket.off(
         "receive_message"
       );
 
       socket.off(
         "receive_summary"
+      );
+
+      socket.off(
+        "session_info"
+      );
+
+      socket.off(
+        "session_ended"
       );
 
       socket.disconnect();
@@ -318,6 +380,45 @@ const ChatRoom = () => {
     date,
     time,
   ]);
+
+
+  // ==================================================
+  // COUNTDOWN (server decides when the session ends)
+  // ==================================================
+
+  useEffect(() => {
+    if (!endsAt || ended) return;
+
+    const timer = setInterval(
+      () => setNow(Date.now()),
+      1000
+    );
+
+    return () => clearInterval(timer);
+  }, [endsAt, ended]);
+
+  const secondsLeft =
+    endsAt
+      ? Math.max(
+          0,
+          Math.floor(
+            (endsAt.getTime() -
+              now) /
+              1000
+          )
+        )
+      : null;
+
+  const countdown =
+    secondsLeft === null
+      ? ""
+      : `${String(
+          Math.floor(
+            secondsLeft / 60
+          )
+        ).padStart(2, "0")}:${String(
+          secondsLeft % 60
+        ).padStart(2, "0")}`;
 
 
   // ==================================================
@@ -383,9 +484,15 @@ const ChatRoom = () => {
       </button>
 
 
-      <h2 className="text-xl font-bold mb-4 text-center">
+      <h2 className="text-xl font-bold mb-1 text-center">
         🗣️ Anonymous Chat
       </h2>
+
+      {!ended && countdown && (
+        <p className="mb-4 text-center text-teal-200 text-sm">
+          ⏱ Time left in this session: {countdown} — the conversation is deleted when it ends
+        </p>
+      )}
 
 
       {chatError && (
@@ -410,9 +517,7 @@ const ChatRoom = () => {
 
                 const isOwnMessage =
                   msg.role ===
-                    user.role &&
-                  msg.alias ===
-                    displayAlias;
+                  user.role;
 
 
                 return (
@@ -446,7 +551,11 @@ const ChatRoom = () => {
 
                       <div className="text-xs text-gray-600">
                         {
-                          msg.timestamp
+                          msg.createdAt
+                            ? new Date(
+                                msg.createdAt
+                              ).toLocaleTimeString()
+                            : msg.timestamp
                         }
                       </div>
 
@@ -485,8 +594,13 @@ const ChatRoom = () => {
       <div className="flex gap-2">
 
         <input
-          className="flex-grow px-3 py-2 rounded bg-white text-black"
-          placeholder="Type a message..."
+          className="flex-grow px-3 py-2 rounded bg-white text-black disabled:opacity-50"
+          disabled={ended}
+          placeholder={
+            ended
+              ? "Session ended"
+              : "Type a message..."
+          }
           value={message}
           onChange={(e) =>
             setMessage(
@@ -508,7 +622,8 @@ const ChatRoom = () => {
           onClick={
             sendMessage
           }
-          className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded text-white font-semibold"
+          disabled={ended}
+          className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Send
         </button>

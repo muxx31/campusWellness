@@ -108,19 +108,23 @@ const CounselorDashboard = ({
         sorted.forEach(
           (b) => {
             const start =
-              new Date(
-                `${b.date}T${b.time}`
-              );
+              b.startAt
+                ? new Date(b.startAt)
+                : new Date(
+                    `${b.date}T${b.time}`
+                  );
 
             const end =
-              new Date(
-                start.getTime() +
-                  45 * 60000
-              );
+              b.endAt
+                ? new Date(b.endAt)
+                : new Date(
+                    start.getTime() +
+                      45 * 60000
+                  );
 
             if (
               now >= start &&
-              now <= end &&
+              now < end &&
               !active
             ) {
               active = b;
@@ -194,22 +198,26 @@ const CounselorDashboard = ({
     allowJoin = true
   ) => {
     const start =
-      new Date(
-        `${booking.date}T${booking.time}`
-      );
+      booking.startAt
+        ? new Date(booking.startAt)
+        : new Date(
+            `${booking.date}T${booking.time}`
+          );
 
     const end =
-      new Date(
-        start.getTime() +
-          45 * 60000
-      );
+      booking.endAt
+        ? new Date(booking.endAt)
+        : new Date(
+            start.getTime() +
+              45 * 60000
+          );
 
     const now =
       new Date();
 
     const isActive =
       now >= start &&
-      now <= end;
+      now < end;
 
     return (
       <div
@@ -221,7 +229,7 @@ const CounselorDashboard = ({
 
           <p>
             <strong>
-              Alias:
+              Student:
             </strong>{" "}
             {booking.alias}
           </p>

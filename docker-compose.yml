@@ -1,0 +1,70 @@
+# Full stack, free and local:   cp .env.example .env  &&  docker compose up --build
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes: [mongo-data:/data/db]
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # BullMQ requires noeviction so queued jobs are never silently dropped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    volumes: [redis-data:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: ./server
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      MONGO_URI: mongodb://mongo:27017/campus_wellness
+      REDIS_URL: redis://redis:6379
+      CORS_ORIGINS: ${PUBLIC_URL:-http://localhost:8080}
+      # served over plain http on localhost; set both for HTTPS deployments
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      COOKIE_SAMESITE: ${COOKIE_SAMESITE:-lax}
+    depends_on:
+      mongo: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    # horizontally scalable: state lives in Redis/Mongo, not in the process
+    deploy:
+      replicas: 2
+
+  worker:
+    build: ./server
+    restart: unless-stopped
+    command: ["node", "worker.js"]
+    healthcheck:
+      disable: true   # the image's HTTP healthcheck only applies to the API
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      MONGO_URI: mongodb://mongo:27017/campus_wellness
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      mongo: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  web:
+    build:
+      context: ./client
+      args:
+        VITE_BACKEND_URL: ""   # same origin: nginx proxies /api and /socket.io
+    restart: unless-stopped
+    ports: ["8080:80"]
+    depends_on: [api]
+
+volumes:
+  mongo-data:
+  redis-data:

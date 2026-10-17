@@ -1,40 +1,29 @@
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
+import { env } from "../config/env.js";
+import { generateAlias } from "../utils/alias.js";
 
-const studentSchema = new mongoose.Schema({
-  studentId: {
-    type: String,
-    required: true,
-    unique: true,
+const studentSchema = new mongoose.Schema(
+  {
+    studentId: { type: String, required: true, unique: true, trim: true },
+    name: { type: String, required: true, trim: true },
+    password: { type: String, required: true },
+    // Anonymous identity shown to counselors, in chat and to the AI. Random, so it can
+    // never be traced back to studentId/name. `sparse`: legacy students get one lazily
+    // (see services/aliasService.js) or via `npm run migrate:anonymize`.
+    alias: { type: String, unique: true, sparse: true, default: generateAlias },
   },
-  name: {
-    type: String,
-    required: true,
-  },
-  password: {
-    type: String,
-    required: true,
-  },
-});
+  { timestamps: true }
+);
 
-// Hash password before saving
 studentSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();
-
-  const salt = await bcrypt.genSalt(10);
-  this.password = await bcrypt.hash(this.password, salt);
-
+  this.password = await bcrypt.hash(this.password, env.BCRYPT_ROUNDS);
   next();
 });
 
-// Compare password during login
-studentSchema.methods.matchPassword = async function (enteredPassword) {
-  return await bcrypt.compare(
-    enteredPassword,
-    this.password
-  );
+studentSchema.methods.matchPassword = function (entered) {
+  return bcrypt.compare(entered, this.password);
 };
 
-const Student = mongoose.model("Student", studentSchema);
-
-export default Student;
+export default mongoose.model("Student", studentSchema);

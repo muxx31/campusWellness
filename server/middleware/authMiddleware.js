@@ -1,116 +1,42 @@
-import jwt from "jsonwebtoken";
-import Student from "../models/Student.js";
-import Counselor from "../models/Counselor.js";
+import { verifyAccessToken } from "../services/tokenService.js";
+import { loadUser } from "../services/userService.js";
+import { AppError, asyncHandler } from "../utils/AppError.js";
 
-// Authentication middleware
-export const protect = async (req, res, next) => {
+export const extractBearer = (req) => {
+  const h = req.headers.authorization;
+  return h && h.startsWith("Bearer ") ? h.slice(7) : null;
+};
+
+// Authentication: verifies the JWT, checks revocation, loads the (cached) user.
+export const protect = asyncHandler(async (req, res, next) => {
+  const token = extractBearer(req);
+  if (!token) throw new AppError(401, "Not authorized. No token provided.");
+
+  let payload;
   try {
-    const authHeader =
-      req.headers.authorization;
-
-    // Check token
-    if (
-      !authHeader ||
-      !authHeader.startsWith("Bearer ")
-    ) {
-      return res.status(401).json({
-        message:
-          "Not authorized. No token provided.",
-      });
-    }
-
-    // Extract token
-    const token =
-      authHeader.split(" ")[1];
-
-    // Verify JWT
-    const decoded = jwt.verify(
-      token,
-      process.env.JWT_SECRET
-    );
-
-    // Student
-    if (decoded.role === "student") {
-      const student =
-        await Student.findById(
-          decoded.id
-        ).select("-password");
-
-      if (!student) {
-        return res.status(401).json({
-          message: "Student not found",
-        });
-      }
-
-      req.user = student;
-      req.userRole = "student";
-
-      return next();
-    }
-
-    // Counselor
-    if (decoded.role === "counselor") {
-      const counselor =
-        await Counselor.findById(
-          decoded.id
-        ).select("-password");
-
-      if (!counselor) {
-        return res.status(401).json({
-          message: "Counselor not found",
-        });
-      }
-
-      req.user = counselor;
-      req.userRole = "counselor";
-
-      return next();
-    }
-
-    return res.status(401).json({
-      message: "Invalid user role",
-    });
-  } catch (error) {
-    console.error(
-      "Authentication error:",
-      error.message
-    );
-
-    return res.status(401).json({
-      message:
-        "Not authorized. Invalid or expired token.",
-    });
-  }
-};
-
-// Authorization: student only
-export const requireStudent = (
-  req,
-  res,
-  next
-) => {
-  if (req.userRole !== "student") {
-    return res.status(403).json({
-      message:
-        "Access denied. Student access required.",
-    });
+    payload = await verifyAccessToken(token);
+  } catch {
+    throw new AppError(401, "Not authorized. Invalid or expired token.");
   }
 
+  req.user = await loadUser(payload.role, payload.id);
+  req.userRole = payload.role;
+  req.auth = payload;
   next();
-};
+});
 
-// Authorization: counselor only
-export const requireCounselor = (
-  req,
-  res,
-  next
-) => {
-  if (req.userRole !== "counselor") {
-    return res.status(403).json({
-      message:
-        "Access denied. Counselor access required.",
-    });
-  }
+// Role-based access control: authorize("admin"), authorize("student", "counselor")...
+export const authorize =
+  (...roles) =>
+  (req, res, next) => {
+    if (!roles.includes(req.userRole)) {
+      return next(
+        new AppError(403, `Access denied. ${roles.join(" or ")} access required.`)
+      );
+    }
+    next();
+  };
 
-  next();
-};
+export const requireStudent = authorize("student");
+export const requireCounselor = authorize("counselor");
+export const requireAdmin = authorize("admin");
