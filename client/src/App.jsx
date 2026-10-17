@@ -15,6 +15,9 @@ import CounselorLoginSignup from "./components/CounselorLoginSignup";
 import Home from "./components/Home";
 import CounselorDashboard from "./components/CounselorDashboard";
 import ChatRoom from "./components/ChatRoom";
+import AdminLoginForm from "./components/AdminLoginForm";
+import AdminDashboard from "./components/AdminDashboard";
+import { logoutRequest } from "./api";
 
 function App() {
   const [user, setUser] =
@@ -63,6 +66,7 @@ function App() {
   };
 
   const handleLogout = () => {
+    logoutRequest(); // revokes tokens server-side (fire and forget)
     setUser(null);
     setRoleSelect("");
 
@@ -154,6 +158,9 @@ function App() {
                     user.role ===
                     "student"
                       ? "/student"
+                      : user.role ===
+                        "admin"
+                      ? "/admin"
                       : "/counselor"
                   }
                 />
@@ -222,6 +229,35 @@ function App() {
                 </>
               ) : (
                 <Navigate to="/" />
+              )
+            }
+          />
+
+          {/* ADMIN (not linked from the public landing page: open /admin directly) */}
+          <Route
+            path="/admin"
+            element={
+              user?.role ===
+              "admin" ? (
+                <>
+                  <LogoutBtn
+                    onLogout={
+                      handleLogout
+                    }
+                  />
+
+                  <AdminDashboard
+                    adminName={
+                      user.name
+                    }
+                  />
+                </>
+              ) : (
+                <AdminLoginForm
+                  onLogin={
+                    handleLogin
+                  }
+                />
               )
             }
           />

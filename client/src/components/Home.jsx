@@ -8,6 +8,17 @@ import BookingForm from "./BookingForm";
 import { useNavigate } from "react-router-dom";
 import BACKEND_URL from "../config";
 
+// The server sends startAt/endAt so every client agrees on the strict 45-minute window.
+const windowOf = (b) => {
+  const start = b.startAt
+    ? new Date(b.startAt)
+    : new Date(`${b.date}T${b.time}`);
+  const end = b.endAt
+    ? new Date(b.endAt)
+    : new Date(start.getTime() + 45 * 60000);
+  return { start, end };
+};
+
 const Home = ({ alias }) => {
   const [bookings, setBookings] =
     useState([]);
@@ -50,20 +61,12 @@ const Home = ({ alias }) => {
         const active =
           res.data.filter(
             (b) => {
-              const start =
-                new Date(
-                  `${b.date}T${b.time}`
-                );
-
-              const end =
-                new Date(
-                  start.getTime() +
-                    45 * 60000
-                );
+              const { start, end } =
+                windowOf(b);
 
               return (
                 now >= start &&
-                now <= end
+                now < end
               );
             }
           );
@@ -71,9 +74,8 @@ const Home = ({ alias }) => {
         const future =
           res.data.filter(
             (b) =>
-              new Date(
-                `${b.date}T${b.time}`
-              ) > now
+              windowOf(b).start >
+              now
           );
 
         const sorted = [
@@ -81,12 +83,8 @@ const Home = ({ alias }) => {
           ...future,
         ].sort(
           (a, b) =>
-            new Date(
-              `${a.date}T${a.time}`
-            ) -
-            new Date(
-              `${b.date}T${b.time}`
-            )
+            windowOf(a).start -
+            windowOf(b).start
         );
 
         setBookings(sorted);
@@ -111,27 +109,16 @@ const Home = ({ alias }) => {
     }
   }, [alias]);
 
-  const isSessionActive = (
-    date,
-    time
-  ) => {
-    const start =
-      new Date(
-        `${date}T${time}`
-      );
-
-    const end =
-      new Date(
-        start.getTime() +
-          45 * 60000
-      );
+  const isSessionActive = (booking) => {
+    const { start, end } =
+      windowOf(booking);
 
     const now =
       new Date();
 
     return (
       now >= start &&
-      now <= end
+      now < end
     );
   };
 
@@ -224,27 +211,18 @@ const Home = ({ alias }) => {
 
                     <button
                       disabled={
-                        !isSessionActive(
-                          b.date,
-                          b.time
-                        )
+                        !isSessionActive(b)
                       }
                       onClick={() =>
                         joinChat(b)
                       }
                       className={`mt-3 w-full sm:w-auto px-4 py-2 rounded text-sm sm:text-base transition ${
-                        isSessionActive(
-                          b.date,
-                          b.time
-                        )
+                        isSessionActive(b)
                           ? "bg-green-600 hover:bg-green-700"
                           : "bg-gray-400 cursor-not-allowed"
                       }`}
                     >
-                      {isSessionActive(
-                        b.date,
-                        b.time
-                      )
+                      {isSessionActive(b)
                         ? "Join Chat"
                         : "Chat Inactive"}
                     </button>

@@ -1,183 +1,78 @@
 import Counselor from "../models/Counselor.js";
-import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
+import { startSession } from "../services/sessionService.js";
+import { isApproved } from "../services/userService.js";
+import { isLocked, recordFailure, clearFailures } from "../services/loginGuard.js";
+import { getOrSet, cacheDel, cacheKeys } from "../services/cache.js";
+import { env } from "../config/env.js";
+import { AppError, asyncHandler } from "../utils/AppError.js";
+import { burnPasswordCheck } from "../utils/dummyHash.js";
 
-// Create JWT
-const generateToken = (id) => {
-  return jwt.sign(
-    {
-      id,
-      role: "counselor",
-    },
-    process.env.JWT_SECRET,
-    {
-      expiresIn: "1h",
-    }
+export const counselorSignup = asyncHandler(async (req, res) => {
+  const { name, email, password } = req.body;
+
+  if (await Counselor.exists({ email })) {
+    throw new AppError(400, "Email already registered");
+  }
+
+  const needsApproval = env.COUNSELOR_SIGNUP_MODE === "approval";
+  const counselor = await Counselor.create({
+    name,
+    email,
+    password,
+    status: needsApproval ? "pending" : "approved",
+  });
+
+  if (needsApproval) {
+    // No session until an admin approves the account.
+    return res.status(202).json({
+      message: "Signup received. An administrator must approve your account before you can log in.",
+      pendingApproval: true,
+    });
+  }
+
+  await cacheDel(cacheKeys.counselors);
+  const session = await startSession(res, "counselor", counselor);
+  res.status(201).json({ message: "Signup successful", ...session });
+});
+
+export const counselorLogin = asyncHandler(async (req, res) => {
+  const { email, password } = req.body;
+
+  if (await isLocked("counselor", email, req.ip)) {
+    throw new AppError(429, "Too many failed attempts. Try again in 15 minutes.");
+  }
+
+  const counselor = await Counselor.findOne({ email });
+  const ok = counselor
+    ? await counselor.matchPassword(password)
+    : await burnPasswordCheck(password);
+
+  if (!counselor || !ok) {
+    await recordFailure("counselor", email, req.ip);
+    throw new AppError(401, "Invalid email or password");
+  }
+  if (!isApproved(counselor)) {
+    throw new AppError(
+      403,
+      counselor.status === "rejected"
+        ? "Your account was not approved."
+        : "Your account is awaiting administrator approval."
+    );
+  }
+
+  await clearFailures("counselor", email, req.ip);
+  const session = await startSession(res, "counselor", counselor);
+  res.status(200).json({ message: "Login successful", ...session });
+});
+
+// Public list used by students when booking. Cached: it changes rarely.
+export const getCounselors = asyncHandler(async (req, res) => {
+  const counselors = await getOrSet(cacheKeys.counselors, 60, () =>
+    Counselor.find({ status: { $nin: ["pending", "rejected"] } })
+      .select("_id name")
+      .sort({ name: 1 })
+      .lean()
   );
-};
-
-// Counselor Signup
-export const counselorSignup = async (req, res) => {
-  try {
-    const { name, email, password } = req.body;
-
-    if (!name || !email || !password) {
-      return res.status(400).json({
-        message:
-          "Name, email, and password are required",
-      });
-    }
-
-    const normalizedEmail = email
-      .trim()
-      .toLowerCase();
-
-    const existingCounselor =
-      await Counselor.findOne({
-        email: normalizedEmail,
-      });
-
-    if (existingCounselor) {
-      return res.status(400).json({
-        message: "Email already registered",
-      });
-    }
-
-    const hashedPassword =
-      await bcrypt.hash(password, 10);
-
-    const counselor =
-      await Counselor.create({
-        name,
-        email: normalizedEmail,
-        password: hashedPassword,
-      });
-
-    const token = generateToken(
-      counselor._id
-    );
-
-    res.status(201).json({
-      message: "Signup successful",
-      token,
-      user: {
-        id: counselor._id,
-        role: "counselor",
-        name: counselor.name,
-        email: counselor.email,
-      },
-    });
-  } catch (err) {
-    console.error(
-      "Counselor signup error:",
-      err
-    );
-
-    if (err.code === 11000) {
-      return res.status(400).json({
-        message: "Email already registered",
-      });
-    }
-
-    res.status(500).json({
-      message:
-        "Server error during signup",
-    });
-  }
-};
-
-// Counselor Login
-export const counselorLogin = async (
-  req,
-  res
-) => {
-  try {
-    const { email, password } = req.body;
-
-    if (!email || !password) {
-      return res.status(400).json({
-        message:
-          "Email and password are required",
-      });
-    }
-
-    const normalizedEmail = email
-      .trim()
-      .toLowerCase();
-
-    const counselor =
-      await Counselor.findOne({
-        email: normalizedEmail,
-      });
-
-    if (!counselor) {
-      return res.status(401).json({
-        message:
-          "Invalid email or password",
-      });
-    }
-
-    const isPasswordCorrect =
-      await bcrypt.compare(
-        password,
-        counselor.password
-      );
-
-    if (!isPasswordCorrect) {
-      return res.status(401).json({
-        message:
-          "Invalid email or password",
-      });
-    }
-
-    const token = generateToken(
-      counselor._id
-    );
-
-    res.status(200).json({
-      message: "Login successful",
-      token,
-      user: {
-        id: counselor._id,
-        role: "counselor",
-        name: counselor.name,
-        email: counselor.email,
-      },
-    });
-  } catch (err) {
-    console.error(
-      "Counselor login error:",
-      err
-    );
-
-    res.status(500).json({
-      message:
-        "Server error during login",
-    });
-  }
-};
-
-// Get counselors for student booking
-export const getCounselors = async (
-  req,
-  res
-) => {
-  try {
-    const counselors =
-      await Counselor.find({})
-        .select("_id name")
-        .sort({ name: 1 });
-
-    res.status(200).json(counselors);
-  } catch (err) {
-    console.error(
-      "Error fetching counselors:",
-      err
-    );
-
-    res.status(500).json({
-      message:
-        "Could not fetch counselors",
-    });
-  }
-};
+  res.set("Cache-Control", "public, max-age=30");
+  res.status(200).json(counselors);
+});

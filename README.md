@@ -1,246 +1,144 @@
 # CampusWellness
 
-CampusWellness is a full-stack anonymous counseling platform designed to help students connect with counselors in a safe and confidential way. The platform allows students to register, book counseling sessions, join anonymous real-time chats during active session windows, and enables counselors to view scheduled sessions and receive AI-generated conversation summaries.
+An anonymous counseling platform: students book 45-minute sessions with counselors, chat in real time during the session window, and counselors receive AI-generated conversation summaries.
 
-## Features
-
-* Student registration and login
-* Counselor registration and login
-* JWT-based authentication
-* Anonymous counseling session booking
-* Active, upcoming, and previous session tracking
-* Real-time chat using Socket.IO
-* Room-based private chat sessions
-* AI-generated counseling summaries for counselors
-* Responsive React frontend
-* MongoDB database integration
-* Secure password hashing using bcrypt
-
-## Tech Stack
-
-**Frontend**
-
-* React
-* React Router
-* Axios
-* Tailwind CSS
-* Socket.IO Client
-
-**Backend**
-
-* Node.js
-* Express.js
-* MongoDB
-* Mongoose
-* JWT
-* bcryptjs
-* Socket.IO
-* Groq/OpenAI-compatible API
-
-## System Architecture
+## Architecture
 
 ```text
-Student / Counselor
-        |
-        v
-React Frontend
-        |
-        v
-Express.js Backend
-        |
-        v
-MongoDB Database
+                    ┌────────── nginx (web) ──────────┐
+ Browser ─────────► │ React SPA   /api → API   /socket.io → API (WebSocket)
+                    └───────────────┬─────────────────┘
+                                    │ round-robin
+                     ┌──────────────┴──────────────┐
+                     ▼                             ▼
+                API replica 1                 API replica N        (stateless)
+              Express + Socket.IO           Express + Socket.IO
+                     │   ▲                         │   ▲
+                     │   └──── Redis pub/sub ──────┘   │   Socket.IO adapter: rooms work across replicas
+                     ▼                                 ▼
+        ┌────────────────────────── Redis ──────────────────────────┐
+        │ cache · refresh tokens · token blacklist · rate-limit     │
+        │ counters · booking locks · live chat buffers · BullMQ     │
+        └──────────────────────────┬────────────────────────────────┘
+                                   ▼
+                          BullMQ worker(s)  ──►  Groq LLM  (summaries)
+                                   │
+                                   └──────────►  MongoDB   (users, bookings, durable messages)
 ```
 
-For real-time chat:
+| Concern | How it is solved |
+|---|---|
+| **Scalability** | API is stateless; all shared state (chat buffers, sessions, locks, rate limits) is in Redis. Run any number of API replicas. |
+| **Caching (Redis)** | Counselor list (60 s), per-user booking lists (30 s, invalidated on write), authenticated-user lookups (5 min, invalidated on change). Cache failures never break a request. |
+| **Async (BullMQ)** | `chat-persist` queue writes messages to MongoDB (idempotent, 5 retries). `chat-summary` queue generates one debounced AI summary per room (3 retries, exponential backoff, rate-limited to protect the LLM quota) and pushes it to the counselor through the Redis emitter. |
+| **Auth** | 15-min JWT access token + single-use rotating refresh token (httpOnly cookie, stored hashed in Redis). Logout revokes both and disconnects live sockets. Roles: `student`, `counselor`, `admin`, enforced by `authorize(...roles)`. |
+| **Security** | helmet, strict CORS allow-list, Redis-backed rate limits (global, login, signup, refresh, per-user booking), per-account lockout, Zod validation on every input, NoSQL-injection and HPP sanitizing, 10 kB body limit, bcrypt (12 rounds), constant-time-ish login, per-socket message rate limit, secrets fail-fast validation. |
+| **Anonymity** | Students log in with their ID but are known to counselors, in chat and to the AI **only by a random alias** (`Anon-7K2QXM`). The counselor API never returns the student ID, name or user reference. |
+| **Strict session window** | Every session is exactly **45 minutes**, enforced by the server (`utils/sessionTime.js`), not the browser: chat can only be opened inside the window, every message is re-checked, and the chat closes itself when time is up. Booking times are wall-clock times in `SESSION_TZ`. |
+| **Retention** | Chat content lives **only as long as the session**: the Redis buffer, the AI summary and the MongoDB messages (TTL index on `expireAt`) all expire when the 45 minutes end, and the browser keeps no copy. Booking records (date/time/alias/issue) remain so the dashboards can list past sessions. |
+| **Deployment** | Multi-stage Docker images (non-root, healthchecks), `docker-compose.yml` (mongo, redis, 2× API, worker, web), GitHub Actions CI/CD → GHCR → deploy hooks. |
 
-```text
-Student ChatRoom  <---->  Socket.IO Server  <---->  Counselor ChatRoom
-                              |
-                              v
-                       AI Summary Service
-```
-
-## Project Structure
-
-```text
-CampusWellness
-├── server
-│   ├── server.js
-│   ├── package.json
-│   ├── models
-│   │   ├── Student.js
-│   │   ├── Counselor.js
-│   │   └── Booking.js
-│   ├── routes
-│   │   ├── studentAuthRoutes.js
-│   │   ├── counselorAuthRoutes.js
-│   │   └── bookingRoutes.js
-│   ├── controllers
-│   │   ├── studentAuthController.js
-│   │   └── counselorAuthController.js
-│   └── services
-│       └── aiSummaryService.js
-│
-└── client
-    └── src
-        ├── App.jsx
-        ├── main.jsx
-        ├── config.js
-        └── components
-            ├── StudentLoginSignup.jsx
-            ├── CounselorLoginSignup.jsx
-            ├── Home.jsx
-            ├── BookingForm.jsx
-            ├── CounselorDashboard.jsx
-            └── ChatRoom.jsx
-```
-
-## Core Workflow
-
-### Student Flow
-
-1. Student signs up or logs in using a student ID and password.
-2. After login, the student can book a counseling session by selecting counselor name, date, time, and optional issue.
-3. The student can view active and upcoming sessions.
-4. Chat becomes available only during the 45-minute active session window.
-5. During the session, the student can chat anonymously with the counselor.
-
-### Counselor Flow
-
-1. Counselor signs up or logs in using email and password.
-2. After login, the counselor can view active, upcoming, and previous sessions.
-3. The counselor can join active sessions.
-4. During chat, the counselor receives AI-generated summaries of the conversation.
-
-## Authentication
-
-The project uses JWT-based authentication. Passwords are securely hashed before being stored in MongoDB.
-
-* Student passwords are hashed using a Mongoose pre-save hook.
-* Counselor passwords are hashed using bcrypt before saving.
-* JWT tokens are generated after successful login.
-
-## Real-Time Chat
-
-Socket.IO is used for real-time communication between students and counselors.
-
-Each counseling session has a unique room ID created using:
-
-```js
-const room = `${counselor}_${date}_${time}`;
-```
-
-Messages are emitted to the specific room, so conversations remain isolated between the correct student and counselor.
-
-## Chat Message Buffering
-
-Chat messages are temporarily stored in an in-memory buffer for AI summary generation.
-
-The structure is:
-
-```text
-HashMap<String, Array<Message>>
-```
-
-Example:
-
-```js
-{
-  "counselor_2026-07-05_10:00": [
-    {
-      sender: "student123",
-      text: "I am feeling stressed",
-      timestamp: "..."
-    }
-  ]
-}
-```
-
-Here:
-
-* `roomId` is the key
-* the value is an array of message objects
-
-## AI Summary
-
-The AI summary service takes the buffered chat messages, formats them into a conversation, and sends them to an AI model. The generated summary focuses on:
-
-* Emotional state
-* Stress concerns
-* Academic issues
-* Social concerns
-
-Summaries are sent only to the counselor.
-
-## API Endpoints
-
-### Student Auth
-
-```text
-POST /api/student/register
-POST /api/student/login
-```
-
-### Counselor Auth
-
-```text
-POST /api/counselorAuth/signup
-POST /api/counselorAuth/login
-```
-
-### Booking
-
-```text
-POST /api/book
-GET /api/bookings/:counselor
-GET /api/student/:alias
-```
-
-### Test Route
-
-```text
-GET /ping
-```
-
-## Environment Variables
-
-Create a `.env` file in the backend folder:
-
-```env
-PORT=5001
-MONGO_URI=your_mongodb_connection_string
-JWT_SECRET=your_jwt_secret
-GROQ_API_KEY=your_groq_api_key
-```
-
-## Installation and Setup
-
-### Backend
+## Run it (free, local)
 
 ```bash
-cd server
-npm install
-npm run dev
+cp .env.example .env
+# put a 48+ byte random secret in JWT_SECRET:
+node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+docker compose up --build
 ```
 
-### Frontend
+Open http://localhost:8080. Create the first admin (needed to approve counselors):
 
 ```bash
-cd client
-npm install
-npm run dev
+docker compose exec -e ADMIN_EMAIL=you@campus.edu -e ADMIN_PASSWORD='a-long-passphrase' api npm run seed:admin
 ```
 
-## Future Improvements
+### Without Docker
 
-* Add stronger validation for booking date and time
-* Add email notifications or reminders
+```bash
+# needs MongoDB and Redis running locally
+cd server && cp .env.example .env   # fill JWT_SECRET
+npm install
+npm run dev            # API + Socket.IO  (http://localhost:5001)
+npm run dev:worker     # BullMQ worker (or set EMBEDDED_WORKER=true and skip this)
 
+cd ../client
+cp .env.example .env && npm install && npm run dev
+```
 
-## Conclusion
+## Admin window
 
-CampusWellness provides a secure and anonymous platform for student counseling. It combines REST APIs for authentication and booking, Socket.IO for real-time chat, MongoDB for persistent data, and AI-powered summaries to support counselors during sessions.
+Open **`/admin`** (e.g. http://localhost:8080/admin; deliberately not linked from the public page) and log in with the account you created with `seed:admin`. The console lists counselors with live counts (pending / approved / rejected), search, and **Approve / Reject / Revoke** buttons. Revoking blocks the counselor immediately, ends their refresh tokens and cuts any live chat.
 
+## Counselor approval (RBAC)
 
+With `COUNSELOR_SIGNUP_MODE=approval` (default) a new counselor can sign up but cannot log in until an admin approves them. Existing counselors (no `status` field) are treated as approved. The admin window above does this in the UI; the same thing via the API:
 
+```bash
+# 1. log in as admin -> returns { token }
+curl -s -X POST localhost:8080/api/admin/login -H 'content-type: application/json' \
+  -d '{"email":"you@campus.edu","password":"a-long-passphrase"}'
+# 2. list pending
+curl -s localhost:8080/api/admin/counselors?status=pending -H "Authorization: Bearer $TOKEN"
+# 3. approve
+curl -s -X PATCH localhost:8080/api/admin/counselors/<id> -H "Authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' -d '{"status":"approved"}'
+```
+
+## API
+
+| Method | Path | Access |
+|---|---|---|
+| POST | `/api/student/register`, `/api/student/login` | public (rate limited) |
+| POST | `/api/counselorAuth/signup`, `/api/counselorAuth/login` | public (rate limited) |
+| GET | `/api/counselorAuth/list` | public (cached) |
+| POST | `/api/auth/refresh`, `/api/auth/logout` | refresh cookie |
+| POST | `/api/book` | student |
+| GET | `/api/student/me` | student |
+| GET | `/api/bookings/me` | counselor |
+| POST | `/api/admin/login` | public (rate limited) |
+| GET/PATCH | `/api/admin/counselors[/:id]` | admin |
+| GET | `/health` (liveness), `/ready` (Mongo + Redis) | public |
+
+Socket.IO events: `join_room`, `send_message` (client → server); `chat_history`, `session_info` (end time), `receive_message`, `receive_summary`, `session_ended`, `chat_error` (server → client). The room is derived on the server from the verified booking; a client-supplied room id is ignored.
+
+## Configuration
+
+See `server/.env.example`. Required: `MONGO_URI`, `REDIS_URL`, `JWT_SECRET` (≥ 32 chars). The server refuses to start with a missing or weak config.
+
+`SESSION_TZ` (default `Asia/Kolkata`) is the IANA time zone in which booking dates/times are interpreted. Set it to where your students are.
+
+### Upgrading an existing database
+
+If you already have data from the earlier version, run this **once** (it is safe to repeat):
+
+```bash
+docker compose exec api npm run migrate:anonymize     # or: cd server && npm run migrate:anonymize
+```
+
+It gives every student an anonymous alias, replaces the real student IDs that old bookings exposed to counselors, and deletes old chat messages that were stored without an expiry.
+
+## Tests & CI
+
+```bash
+cd server && npm test     # needs MongoDB + Redis (uses Redis db 1 and a *_test database)
+```
+
+Tests cover auth, token rotation/revocation, RBAC, counselor approval, booking overlap and a concurrent double-booking race, input validation, NoSQL injection, rate limiting, and the socket chat flow including queue persistence and AI-summary delivery. GitHub Actions (`.github/workflows/ci.yml`) runs them with Mongo and Redis service containers, builds the client, then (on `main`) pushes images to GHCR and triggers optional deploy hooks.
+
+## Deploying on free tiers
+
+* **MongoDB**: Atlas M0.
+* **Redis**: Redis Cloud free (30 MB) or any self-hosted Redis. It must use the **`noeviction`** policy for BullMQ. Avoid per-request-priced Redis (e.g. Upstash free): BullMQ polls constantly and exhausts the quota.
+* **API**: a Render/Railway/Fly web service from `server/` with `EMBEDDED_WORKER=true` (free tiers rarely offer background workers), `NODE_ENV=production`, `CORS_ORIGINS=<your frontend URL>`, `TRUST_PROXY=1`. With a separately hosted frontend the defaults (`Secure` + `SameSite=None` cookie) are correct.
+* **Frontend**: Render static site / Netlify / Vercel with `VITE_BACKEND_URL=<your API URL>`.
+* On a paid/VM host, use `docker compose` as-is; scale with `docker compose up -d --scale api=4`.
+
+## Known limits / next steps
+
+* **Planned feature:** an "add 10 minutes" button during a session. The 45-minute length lives in one place (`server/utils/sessionTime.js`); extensions would be added there, and the end time is already pushed to clients (`session_info`) rather than computed by them.
+* MongoDB's TTL monitor runs about once a minute, so stored messages can linger up to ~60 s after a session ends. Live chat access is cut exactly at the end by the server.
+* AI summaries are deleted with the chat, so counselors cannot read them after the session. Chat/summary content is sent to a third-party LLM (Groq): add a consent screen and consider encryption at rest for real mental-health data.
+* The booking form's free-text "issue" is kept with the booking record and can contain identifying details a student chooses to type.
+* Refresh-token rotation has no reuse/theft detection (a replayed old token is simply rejected).
+* Run `npm install` once in `server/` and `client/` and commit the generated `package-lock.json` files, then enable npm caching in CI.
